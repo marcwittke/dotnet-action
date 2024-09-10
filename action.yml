@@ -1,0 +1,51 @@
+name: 'dotnet restore, build, test'
+description: Runs dotnet restore, build and test and uploads test results and anything in the directory `artifacts` to Github.
+
+inputs:
+  project-directory:
+    description: The full qualified path of the dotnet project
+    required: true
+
+runs:
+  using: composite
+  
+  steps:
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: "8.0.x"
+
+    - name: dotnet restore
+      shell: bash
+      working-directory: ${{ inputs.project-directory }}
+      run: dotnet restore
+
+    - name: dotnet build
+      shell: bash
+      working-directory: ${{ inputs.project-directory }}
+      run: dotnet build --configuration Release --no-restore      
+
+    - name: dotnet test
+      shell: bash
+      working-directory: ${{ inputs.project-directory }}
+      run: |
+        dotnet test \
+          --no-restore \
+          --logger trx \
+          --results-directory ${{ inputs.project-directory }}/test-results \
+          /p:CollectCoverage=true \
+          /p:MergeWith=tests-result.json
+
+    - name: Parse test results
+      uses: NasAmin/trx-parser@v0.6.0
+      if: ${{ always() }}
+      id: trx-parser
+      with:
+        TRX_PATH: ${{ inputs.project-directory }}/test-results
+        REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: artifacts
+        path: ${{ inputs.project-directory }}/artifacts
